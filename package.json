@@ -1,0 +1,14 @@
+{
+  "name": "shopmate",
+  "version": "1.0.0",
+  "description": "An application for managing stock inventory and e-commerce activity of a store ",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "DivadLabs",
+  "license": "ISC",
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}
