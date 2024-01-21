@@ -20,14 +20,19 @@ function uniqueCode() {
 }
 
 const signup = asyncHandler(async(req, res) => {
-    const { name, email, phone, pic, role, branch, password } = req.body
-    if (!name || !email || !password) {
+    const { firstName, lastName, email, phone, pic, role, branch, password } = req.body
+    if (!firstName || !lastName || !email || !password || !phone) {
         return res.status(StatusCodes.BAD_REQUEST).json({ err: "name, email password must be provided" })
     }
     // check if email already exist
-    const userExist = await User.findOne({ email })
+    const userExist = await User.findOne({
+        $or: [
+            { email: { $regex: new RegExp(email, 'i') } },
+            { phone: { $regex: new RegExp(phone, 'i') } }
+        ]
+    })
     if (userExist) {
-        return res.status(500).json({ err: `oops, ${email} is aleready registered to another user.` })
+        return res.status(500).json({ err: `oops, email or phone is aleready registered to another user.` })
     }
     const newUser = await User.create(req.body)
     if (!newUser) {
@@ -46,14 +51,19 @@ const signup = asyncHandler(async(req, res) => {
 })
 
 const login = asyncHandler(async(req, res) => {
-    const { email, password } = req.body
-    if (!email || !password) {
+    const { username, password } = req.body // username can take either of email or phone no.
+    if (!username || !password) {
         return res.status(500).json({ msg: "Please provide login credentials" })
     }
     // check if email is registered
-    const userExist = await User.findOne({ email }).populate('branch', 'location')
+    const userExist = await User.findOne({
+        $or: [
+            { email: { $regex: new RegExp(username, 'i') } },
+            { phone: { $regex: new RegExp(username, 'i') } }
+        ]
+    }).populate('branch', 'location')
     if (!userExist) {
-        return res.status(StatusCodes.NOT_FOUND).json({ err: `${email} is not a registered email address!!!` })
+        return res.status(StatusCodes.NOT_FOUND).json({ err: `Error... Account not found!!!` })
     }
     let userId = userExist._id
     const userAuth = await Auth.findOne({ userId })
