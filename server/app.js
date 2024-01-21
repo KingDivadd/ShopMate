@@ -31,7 +31,7 @@ let PORT = process.env.PORT || 5500
 const start = async() => {
     try {
         await connectDB()
-        app.listen(PORT, console.log(`ShopIt SERVER started and running on port ${PORT}`.cyan.bold))
+        app.listen(PORT, console.log(`shopKeeper-1.0 server started and running on port ${PORT}`.cyan.bold))
     } catch (err) {
         console.log(err);
     }
