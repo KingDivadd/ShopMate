@@ -6,19 +6,30 @@ const Invoice = require("../models/invoice-model")
 const User = require("../models/user-model")
 
 
+// branch_id should only be used when the admin makes the sale, otherwise automatically populate it
 const newSale = asyncHandler(async(req, res) => {
     const { branch_id, sale, customer, paymentStatus, paymentMethod, totalPaid } = req.body
-
-    if (!branch_id || !sale.length) {
+    let branchId;
+    if (!sale.length) {
         return res.status(500).json({ err: `Error... Provide all necessary informations to make sale!!!` })
+    }
+    if (req.info.id.role === "admin" && !branch_id) {
+        return res.status(404).json({ err: `Please select a branch!!!` })
+    }
+    if (req.info.id.role !== "admin") {
+        const user = await User.findOne({ _id: req.info.id.id })
+        branchId = String(user.branch)
+    }
+    if (req.info.id.role === "admin" && branch_id) {
+        branchId = branch_id
     }
 
     const seller = await User.findOne({ _id: req.info.id.id })
-    const branchExist = await Branch.findOne({ _id: branch_id })
+    const branchExist = await Branch.findOne({ _id: branchId })
     if (!branchExist) {
         return res.status(404).json({ err: `Error... Branch with ID of ${branch_id} is not a registered branch!!!` })
     }
-    if (req.info.id.role !== 'ADMIN' && !(req.info.id.role === 'BRANCH MANAGER' || seller.branch === branch_id) && !(req.info.id.role === 'SALES PERSON' || seller.branch === branch_id)) {
+    if (req.info.id.role !== 'admin' && !(req.info.id.role === 'branch-manager' || seller.branch === branchId) && !(req.info.id.role === 'sales-person' || seller.branch === branchId)) {
         return res.status(401).json({ err: `Error... ${req.info.id.name}, you're not authorized to make sales in ${branchExist.location} branch` })
     }
 
@@ -26,7 +37,7 @@ const newSale = asyncHandler(async(req, res) => {
     let saleListBox = []
     let productLeftBox = []
     for (let i = sale.length; i--; i > 0) {
-        const productExist = await Product.findOne({ productBranch: branch_id, productName: sale[i].productName })
+        const productExist = await Product.findOne({ productBranch: branchId, productName: sale[i].productName })
         if (!productExist) {
             return res.status(404).json({ err: `${sale[i].productName} not found in ${branchExist.location} branch!!!` })
         }
@@ -58,8 +69,8 @@ const newSale = asyncHandler(async(req, res) => {
     }
 
 
-    if (branch_id.trim() !== '') {
-        update.branch = branch_id.trim()
+    if (branchId.trim() !== '') {
+        update.branch = branchId.trim()
     }
     if (customer.trim() !== '') {
         update.customer = customer.trim()
@@ -110,31 +121,40 @@ const newSale = asyncHandler(async(req, res) => {
 
     const newInvoice = await Invoice.create(update)
 
-    const updateCurrentBranch = await Branch.findOneAndUpdate({ _id: branch_id }, { $push: { invoiceList: newInvoice._id } }, { new: true, runValidators: true }).select("location invoiceList")
+    const updateCurrentBranch = await Branch.findOneAndUpdate({ _id: branchId }, { $push: { invoiceList: newInvoice._id } }, { new: true, runValidators: true }).select("location invoiceList")
 
     return res.send({ msg: `Sales created successfully`, currentBranch: updateCurrentBranch, invoice: newInvoice, })
 })
 
+// if the loggedInUser is not admin, it should automatically fetch the invoice for his branch
 const allSaleInvoice = asyncHandler(async(req, res) => {
     const { branch_id, invoice_id, startDate, endDate } = req.body
+    let branchId;
 
     const userExist = await User.findOne({ _id: req.info.id.id })
     if (!userExist) {
         return res.status(404).json({ err: `Error... User with ID ${req.info.id.id} not found!!!` })
     }
-    if (!branch_id) {
-        return res.status(404).json({ err: `Error... Please provide the branch id!!!` })
+
+    if (req.info.id.role === "admin" && !branch_id) {
+        return res.status(500).json({ err: `Please select a branch!!!` })
     }
-    const branchExist = await Branch.findOne({ _id: branch_id })
+    if (req.info.id.role !== "admin") {
+        const user = await User.findOne({ _id: req.info.id.id })
+        branchId = String(user.branch)
+    }
+    if (req.info.id.role === "admin" && branch_id) {
+        branchId = String(branch_id)
+    }
+
+    const branchExist = await Branch.findOne({ _id: branchId })
     if (!branchExist) {
         return res.status(404).json({ err: `Error... Branch with ID of ${branch_id} is not a registered branch!!!` })
     }
-    if (req.info.id.role !== 'ADMIN' && String(userExist.branch) !== branch_id) {
-        return res.status(401).json({ err: `Error... ${req.info.id.name}, you're not authorized to view sale lists for ${branchExist.location} branch` })
-    }
+
     const query = {}
-    if (branch_id) {
-        query.branch = branch_id.trim()
+    if (branchId) {
+        query.branch = branchId.trim()
     }
     if (invoice_id) {
         query._id = invoice_id.trim()
@@ -145,9 +165,10 @@ const allSaleInvoice = asyncHandler(async(req, res) => {
     if (endDate) {
         query.createdAt = { $gt: new Date(endDate) }
     }
-    const branchInvoice = await Invoice.find(query).populate("addedBy", "name role")
+
+    const branchInvoice = await Invoice.find(query).populate("addedBy", "lastName firstName role")
     if (!branchInvoice.length) {
-        return res.status(404).json({ msg: `${branchExist.location} branch has no recorded invoices yet!!!` })
+        return res.status(404).json({ msg: `${branchExist.location} branch has no recorded invoices yet!!!`, branch: branchExist.location, nbInvoices: branchInvoice.length, invoices: branchInvoice })
     }
     return res.status(200).json({ branch: branchExist.location, nbInvoices: branchInvoice.length, invoices: branchInvoice })
 })
@@ -170,7 +191,7 @@ const editSaleInvoice = asyncHandler(async(req, res) => {
         return res.status(404).json({ err: `Error... Invoice with ID of ${invoice_id} was not found in ${branchExist.location} branch's inventory!!!` })
     }
 
-    if (req.info.id.role !== 'ADMIN' && !(req.info.id.role === 'BRANCH MANAGER' || user.branch === branch_id)) {
+    if (req.info.id.role !== 'admin' && !(req.info.id.role === 'branch-manager' || user.branch === branch_id)) {
         return res.status(401).json({ err: `Error... ${req.info.id.name}, you're not authorized to make changes to sales invoice in ${branchExist.location} branch` })
     }
 
@@ -305,7 +326,7 @@ const editSaleInvoice = asyncHandler(async(req, res) => {
 
 const deleteInvoice = asyncHandler(async(req, res) => {
     const { branch_id, invoice_id } = req.body
-    if (req.info.id.role !== 'ADMIN') {
+    if (req.info.id.role !== 'admin') {
         return res.status(401).json({ err: `Error... ${req.info.id.name}, you're not authorized to delete any invoice!!!` })
     }
     const branchExist = await Branch.findOne({ _id: branch_id })

@@ -114,35 +114,32 @@ const updateUserInfo = asyncHandler(async(req, res) => {
             // should only be able to change the role of the staff in the same branch
 
             if (!userExist.branch) {
-                // here the user to edit has no previous branch/location
-                if (role && userExist.role === "branch-manager") {
-                    return res.status(StatusCodes.UNAUTHORIZED).json({ err: `Error... You are not authorized to change the role of a branch-manager in your branch` })
-                }
-                if (role.trim() !== '') {
-                    update.role = role.trim()
-                }
-                if (branch) {
-                    const branchExist = await Branch.findOne({ location: branch })
-                    if (!branchExist) {
-                        return res.status(StatusCodes.NOT_FOUND).json({ err: `Error... Unregistered Branch entered!!!` })
-                    }
-                    // new ensure that the branch is thesame as that of the BM
-                    if (loggedInUser.branch.location !== branch) {
-                        return res.status(StatusCodes.UNAUTHORIZED).json({ err: `Error... Can only make changes within your branch` })
-                    }
-                    update.branch = branchExist._id
-                }
+                // in this case only the admin should be allowed to work here.
+                return res.status(200).json({ msg: `Selected user isn't under your jurisdiction, only admin can make changes!!!` })
+
             }
 
             if (userExist.branch && (loggedInUser.branch.location === userExist.branch.location)) {
-                // return res.status(StatusCodes.OK).send(userExist)
+                console.log("logLoc : ", loggedInUser.branch.location, "otherUser : ", userExist.branch.location)
+                    // return res.status(StatusCodes.OK).send(userExist)
 
                 if (role && userExist.role === "branch-manager") {
                     return res.status(StatusCodes.UNAUTHORIZED).json({ err: `Error... You are not authorized to change the role of a branch-manager in your branch` })
                 }
                 if (role.trim() !== '') {
-                    update.role = role.trim()
+                    if (role !== 'admin') {
+                        update.role = role.trim()
+                    }
+                    console.log("admin nah")
                 }
+                if (firstName.trim() !== '') {
+                    update.firstName = firstName.trim()
+                }
+                if (lastName.trim() !== '') {
+                    update.lastName = lastName.trim()
+                }
+            } else {
+                return res.status(401).json({ err: `You can only make changes to staff's info under your jurisdiction!!!` })
             }
             // return res.status(StatusCodes.UNAUTHORIZED).json({ err: `Error... Cannot make changes beyond your jurisdiction!!!` })
         }
@@ -161,7 +158,7 @@ const updateUserInfo = asyncHandler(async(req, res) => {
         }
         // check if entered branch exist
         if (branch) {
-            const branchExist = await Branch.findOne({ location: branch })
+            const branchExist = await Branch.findOne({ location: branch.toUpperCase() })
             if (!branchExist) {
                 return res.status(StatusCodes.NOT_FOUND).json({ err: `Error... Unregistered Branch entered!!!` })
             }
